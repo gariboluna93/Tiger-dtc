@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Tiger DTC</title>
+<meta name="theme-color" content="#14171a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: una columna tipo tablero TFT; barra de estado fija arriba, acciones, luego modulos */
+:root{
+  --bg:#f3f4f2; --panel:#ffffff; --fg:#16191c; --mut:#5d646b; --line:#d9ddd8;
+  --accent:#0a6e8a; --accent-fg:#ffffff;
+  --red:#b3261e; --amber:#9a5b00; --green:#1f6b3d;
+  --display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#101315; --panel:#191d20; --fg:#e8ebe8; --mut:#9aa2a8; --line:#2c3236;
+  --accent:#4cc3e0; --accent-fg:#071317; --red:#ff8a80; --amber:#f2b84b; --green:#7fd69b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101315; --panel:#191d20; --fg:#e8ebe8; --mut:#9aa2a8; --line:#2c3236;
+  --accent:#4cc3e0; --accent-fg:#071317; --red:#ff8a80; --amber:#f2b84b; --green:#7fd69b; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+.wrap{max-width:760px;margin:0 auto}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding-top:calc(10px + env(safe-area-inset-top,0px));padding-bottom:10px;border-bottom:1px solid var(--line)}
+h1{font:700 26px/1.1 var(--display);letter-spacing:.02em;margin:0;text-transform:uppercase}
+h1 small{font:500 13px var(--body);color:var(--mut);text-transform:none;letter-spacing:0;margin-left:6px}
+.status{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{font:500 12px var(--mono);padding:3px 8px;border:1px solid var(--line);border-radius:999px;color:var(--mut);background:var(--panel)}
+.chip.on{color:var(--green);border-color:color-mix(in srgb,var(--green) 45%,var(--line))}
+.chip.bad{color:var(--red);border-color:color-mix(in srgb,var(--red) 45%,var(--line))}
+.chip.warn{color:var(--amber)}
+.actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:14px 0}
+button{font:600 15px var(--body);padding:12px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+button.danger{color:var(--red);border-color:color-mix(in srgb,var(--red) 40%,var(--line))}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.note{color:var(--mut);font-size:13px;margin:6px 0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0;min-width:0}
+.mod h2{font:600 19px/1.2 var(--display);letter-spacing:.02em;margin:0;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.mod h2 code{font:500 12px var(--mono);color:var(--mut)}
+.ident{font:12px var(--mono);color:var(--mut);word-break:break-all;margin:4px 0 8px}
+.dtc{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;padding:8px 0 8px 10px;border-top:1px solid var(--line);border-left:3px solid var(--amber)}
+.dtc.act{border-left-color:var(--red)}
+.dtc b{font:600 16px var(--mono)}
+.dtc .tag{font:600 11px var(--body);text-transform:uppercase;letter-spacing:.06em;color:var(--amber);align-self:center}
+.dtc.act .tag{color:var(--red)}
+.dtc .desc{grid-column:1/-1;font-size:14px}
+.dtc .raw{grid-column:1/-1;font:11px var(--mono);color:var(--mut);word-break:break-all}
+.ok{color:var(--green);font-weight:600}
+details summary{cursor:pointer;color:var(--mut);font-size:13px;margin-top:6px}
+details code{font:11px var(--mono);margin-right:6px}
+.gauges{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.g{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.g .v{font:700 28px/1.1 var(--display);font-variant-numeric:tabular-nums}
+.g .l{font-size:12px;color:var(--mut)}
+.confirm{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.confirm input{font:600 15px var(--mono);padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);width:9em}
+.checks{display:flex;gap:12px;flex-wrap:wrap;margin:6px 0}
+.checks label{display:flex;gap:6px;align-items:center;font-size:14px}
+.trip{border-color:var(--accent)}
+.tripHead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.tripHead h2{font:600 22px var(--display);margin:0}
+.rec{font:600 14px var(--mono);color:var(--red);margin-left:8px}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}
+.tile{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+.tile .v{font:700 34px/1.05 var(--display);font-variant-numeric:tabular-nums}
+.tile.big .v{font-size:52px}
+.tile .l{font-size:12px;color:var(--mut)}
+.tile.alert{border-color:var(--red)} .tile.alert .v{color:var(--red)}
+.tile.warn .v{color:var(--amber)}
+.events{margin:0;padding-left:20px;font-size:14px;max-height:240px;overflow:auto}
+.events li{margin:3px 0} .events time{font:12px var(--mono);color:var(--mut);margin-right:6px}
+.events .bad{color:var(--red);font-weight:600}
+.tripRow{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);padding:8px 0;font-size:14px}
+.tripRow button{padding:8px 10px;font-size:13px}
+.marks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0}
+.marks button.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.cand{width:100%;border-collapse:collapse;font-size:13px}
+.cand td,.cand th{border-top:1px solid var(--line);padding:5px 4px;text-align:left}
+.cand code{font:12px var(--mono)}
+.scroll{overflow-x:auto}
+pre#log{font:11px/1.4 var(--mono);color:var(--mut);max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:0}
+.cmp li{margin:2px 0}
+@media (prefers-reduced-motion:no-preference){button{transition:filter .15s}button:hover:not(:disabled){filter:brightness(1.06)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Tiger DTC <small>v3.1 · Tiger 900</small></h1>
+  <div class="status">
+    <span class="chip" id="stLink">Sin conexion</span>
+    <span class="chip" id="stBus">Bus: -</span>
+    <span class="chip" id="stVolt">Voltaje: -</span>
+  </div>
+</header>
+
+<p class="note" id="support"></p>
+
+<div class="actions">
+  <button class="primary" id="bConnect">Conectar vLinker</button>
+  <button id="bRead" disabled>Leer todos los modulos</button>
+  <button id="bLive" disabled>Datos en vivo</button>
+  <button id="bExport" disabled>Exportar JSON</button>
+  <button class="primary" id="bTrip" disabled>Modo viaje</button>
+  <button id="bBus" disabled>Explorador del bus</button>
+</div>
+
+<section class="panel" id="busPanel" hidden>
+  <div class="tripHead">
+    <h2>Explorador del bus <span class="rec" id="busRec"></span></h2>
+    <button class="danger" id="bBusStop">Detener</button>
+  </div>
+  <p class="note">Solo escucha el bus: no transmite nada. Moto detenida y en su soporte, contacto ON. Toca la accion que vas a hacer, mantenla unos 10 segundos, luego toca <b>Nada</b> y suelta. Repite cada accion 2 o 3 veces.</p>
+  <div class="marks" id="busMarks"></div>
+  <p class="note" id="busStat">-</p>
+  <div id="busResult"></div>
+</section>
+
+<section class="panel trip" id="tripPanel" hidden>
+  <div class="tripHead">
+    <h2>Modo viaje <span class="rec" id="tripRec">● REC 00:00</span></h2>
+    <button class="danger" id="bTripStop">Detener y guardar</button>
+  </div>
+  <div class="tiles">
+    <div class="tile big"><div class="v" id="tVolt">-</div><div class="l">Bateria (V) · min <b id="tVmin">-</b></div></div>
+    <div class="tile big"><div class="v" id="tDtc">OK</div><div class="l" id="tDtcL">Codigos nuevos</div></div>
+    <div class="tile"><div class="v" id="tRpm">-</div><div class="l">RPM</div></div>
+    <div class="tile"><div class="v" id="tSpd">-</div><div class="l">km/h</div></div>
+    <div class="tile"><div class="v" id="tThr">-</div><div class="l">Acelerador %</div></div>
+    <div class="tile"><div class="v" id="tLoad">-</div><div class="l">Carga motor %</div></div>
+    <div class="tile"><div class="v" id="tClt">-</div><div class="l">Refrigerante °C</div></div>
+    <div class="tile"><div class="v" id="tCrank">-</div><div class="l">Min. al arrancar (V)</div></div>
+  </div>
+  <p class="note">Telefono montado y con pantalla encendida. No toques la app mientras manejas: todo se registra solo. Revisa codigos cada 20 s; voltaje y motor ~1-2 veces por segundo.</p>
+  <ol class="events" id="tEvents"></ol>
+</section>
+
+<section class="panel" id="tripsPanel" hidden>
+  <h2 style="font:600 19px var(--display);margin:0">Viajes guardados</h2>
+  <div id="tripList"></div>
+</section>
+
+<div id="cmp"></div>
+<div id="mods"></div>
+
+<section class="panel" id="livePanel" hidden>
+  <h2 style="font:600 19px var(--display);margin:0 0 8px">Datos en vivo · Engine ECM</h2>
+  <div class="gauges" id="gauges"></div>
+</section>
+
+<section class="panel" id="clearPanel" hidden>
+  <h2 style="font:600 19px var(--display);margin:0">Borrar codigos</h2>
+  <p class="note">Moto detenida, motor apagado, contacto ON. Se bloquea si el voltaje es menor a 12.0 V. Se guarda un respaldo de la lectura antes de borrar.</p>
+  <div class="checks" id="clearChecks"></div>
+  <div class="confirm">
+    <input id="clearWord" autocomplete="off" placeholder="BORRAR" aria-label="Escribe BORRAR para confirmar">
+    <button class="danger" id="bClear" disabled>Borrar seleccionados</button>
+  </div>
+</section>
+
+<details class="panel"><summary>Registro de comunicacion</summary><pre id="log"></pre></details>
+</div>
+
+<script>
+"use strict";
+/* ------------------------------------------------------------------ base de descripciones */
+const DB = {"C1001":["Main power supply overvoltage",441,"Chassis ECM"],"C1002":["Main power supply undervoltage",441,"Chassis ECM"],"C1003":["Chassis ECM internal power supply malfunction",441,"Chassis ECM"],"C1004":["Alarm/tracker input signal malfunction",441,"Chassis ECM"],"C1005":["Rear brake switch correlation error",441,"Chassis ECM"],"C1006":["Front brake switch correlation error",441,"Chassis ECM"],"C1008":["Starter motor switch malfunction",441,"Chassis ECM"],"C1009":["Ambient temperature sensor signal under temperature",441,"Chassis ECM"],"C1010":["Ambient temperature sensor signal over temperature",441,"Chassis ECM"],"C1017":["Instrument wake-up signal overcurrent",441,"Chassis ECM"],"C1027":["Sensor Supply General",449,"Chassis ECM"],"C1031":["Left headlight (high beam) undercurrent",441,"Chassis ECM"],"C1032":["Left headlight (high beam) overcurrent",442,"Chassis ECM"],"C1035":["Left headlight (low beam) undercurrent",442,"Chassis ECM"],"C1036":["Left headlight (low beam) overcurrent",442,"Chassis ECM"],"C1042":["Fog lights undercurrent",442,"Chassis ECM"],"C1043":["Fog lights overcurrent",442,"Chassis ECM"],"C1045":["Front position light overcurrent",442,"Chassis ECM"],"C1047":["Rear light overcurrent",442,"Chassis ECM"],"C1051":["Brake light overcurrent",442,"Chassis ECM"],"C1052":["Left front direction indicator undercurrent",442,"Chassis ECM"],"C1053":["Left front direction indicator overcurrent",442,"Chassis ECM"],"C1054":["Left rear direction indicator undercurrent",442,"Chassis ECM"],"C1055":["Left rear direction indicator overcurrent",442,"Chassis ECM"],"C1056":["Right front direction indicator undercurrent",442,"Chassis ECM"],"C1057":["Right front direction indicator overcurrent",442,"Chassis ECM"],"C1058":["Right rear direction indicator undercurrent",442,"Chassis ECM"],"C1059":["Right rear direction indicator overcurrent",442,"Chassis ECM"],"C1060":["Horn undercurrent",442,"Chassis ECM"],"C1061":["Horn overcurrent",442,"Chassis ECM"],"C1062":["Rider heated seat undercurrent",442,"Chassis ECM"],"C1063":["Rider heated seat overcurrent",442,"Chassis ECM"],"C1064":["Passenger heated seat undercurrent",443,"Chassis ECM"],"C1065":["Passenger heated seat overcurrent",443,"Chassis ECM"],"C1066":["Right heated grip undercurrent",443,"Chassis ECM"],"C1067":["Right heated grip overcurrent",443,"Chassis ECM"],"C1068":["Left heated grip undercurrent",443,"Chassis ECM"],"C1069":["Left heated grip overcurrent",443,"Chassis ECM"],"C1070":["Cooling fan undercurrent",443,"Chassis ECM"],"C1071":["Cooling fan overcurrent",443,"Chassis ECM"],"C1072":["Fuel pump undercurrent",443,"Chassis ECM"],"C1073":["Fuel pump overcurrent",443,"Chassis ECM"],"C1074":["Universal Serial Bus (USB) power socket overcurrent",443,"Chassis ECM"],"C1075":["Passenger accessory power socket overcurrent",443,"Chassis ECM"],"C1077":["Starter motor solenoid undercurrent",443,"Chassis ECM"],"C1078":["Starter motor solenoid overcurrent",443,"Chassis ECM"],"C1087":["CAN fault - lost communication with instruments",443,"Chassis ECM"],"C1088":["CAN fault - lost communication with ABS module",443,"Chassis ECM"],"C1091":["CAN fault - lost communication with Engine ECM",443,"Chassis ECM"],"C1095":["Chassis ECM internal error",443,"Chassis ECM"],"C1114":["Passenger heated seat switch malfunction",443,"Chassis ECM"],"C1115":["Passenger heated seat switch position one malfunction",444,"Chassis ECM"],"C1116":["Passenger heated seat switch position two malfunction",444,"Chassis ECM"],"C1123":["CAN Error - No response to control module CAN communication",444,"Chassis ECM"],"C1124":["Chassis ECM restarted due to process time out during normal operation",444,"Chassis ECM"],"C1125":["Chassis ECM restarted due to process time out during normal operation",444,"Chassis ECM"],"C1126":["Chassis ECM restarted due to process time out during normal operation",444,"Chassis ECM"],"C1127":["Chassis ECM restarted due to calibration download or software timeout",444,"Chassis ECM"],"C1128":["Unexpected chassis ECM restart",444,"Chassis ECM"],"C1129":["Chassis ECM power supply interrupted",444,"Chassis ECM"],"C1130":["Chassis ECM parameters reset to default",444,"Chassis ECM"],"C1154":["Engine stop switch lock enabled",444,"Chassis ECM"],"C1155":["Engine stop switch lock active",444,"Chassis ECM"],"C1161":["Cooling fan 2 undercurrent",444,"Chassis ECM"],"C1162":["Cooling fan 2 overcurrent",444,"Chassis ECM"],"C1611":["Front wheel sensor short circuit to ground or open circuit",293,"ABS ECM"],"C1612":["Front wheel sensor abnormal input or dropping out",293,"ABS ECM"],"C1613":["Rear wheel sensor short circuit to ground or open circuit",293,"ABS ECM"],"C1614":["Rear wheel sensor abnormal input or dropping out",293,"ABS ECM"],"C1621":["Front wheel pulser gear missing teeth",293,"ABS ECM"],"C1623":["Rear wheel pulser gear missing teeth",294,"ABS ECM"],"C1631":["Front wheel input solenoid short circuit to ground or open circuit",294,"ABS ECM"],"C1632":["Front wheel output solenoid short circuit to ground or open circuit",294,"ABS ECM"],"C1633":["Rear wheel input solenoid short circuit to ground or open circuit",294,"ABS ECM"],"C1634":["Rear wheel output solenoid short circuit to ground or open circuit",294,"ABS ECM"],"C1641":["Front wheel speed signal error; simulated wheel lock",294,"ABS ECM"],"C1643":["Rear wheel speed signal error; simulated wheel lock",294,"ABS ECM"],"C1651":["Motor - Lock",294,"ABS ECM"],"C1652":["Motor does not run",294,"ABS ECM"],"C1653":["Motor runs continually",294,"ABS ECM"],"C1661":["Power source Voltage drop",294,"ABS ECM"],"C1662":["Power source Voltage rise",294,"ABS ECM"],"C1671":["Different tyre diameter",294,"ABS ECM"],"C1681":["Abnormal ECU",294,"ABS ECM"],"C1682":["CAN fault - lost communication with engine ECM",294,"ABS ECM"],"C1683":["CAN fault - lost communication with instrument panel",294,"ABS ECM"],"C1684":["CAN lost fault - all communication",294,"ABS ECM"],"C1692":["Modulator output (wheel) pressure sensor malfunction",294,"ABS ECM"],"C1700":["EEPROM error",294,"ABS ECM - IMU (sensor box / yaw rate)"],"C1701":["Sensor box internal error",294,"ABS ECM - IMU (sensor box / yaw rate)"],"C1702":["Sensor box internal error",294,"ABS ECM - IMU (sensor box / yaw rate)"],"C1703":["Yaw rate internal error",294,"ABS ECM - IMU (sensor box / yaw rate)"],"C1704":["Yaw rate internal error",294,"ABS ECM - IMU (sensor box / yaw rate)"],"C1705":["Yaw rate internal error",294,"ABS ECM - IMU (sensor box / yaw rate)"],"C1711":["Sensor box internal error",308,"ABS ECM - IMU (sensor box / yaw rate)"],"C1712":["Sensor box internal error",308,"ABS ECM - IMU (sensor box / yaw rate)"],"C1713":["Yaw rate internal error",308,"ABS ECM - IMU (sensor box / yaw rate)"],"C1714":["Yaw rate internal error",308,"ABS ECM - IMU (sensor box / yaw rate)"],"C1715":["Yaw rate internal error",308,"ABS ECM - IMU (sensor box / yaw rate)"],"L0001":["Front Wheel Unit Sensor Battery Alert",210,"Chassis ECM (Immobiliser/TPMS)"],"L0002":["Rear Wheel Unit Sensor Battery Alert",210,"Chassis ECM (Immobiliser/TPMS)"],"L0003":["Front Wheel Unit Sensor Fault Alert",210,"Chassis ECM (Immobiliser/TPMS)"],"L0004":["Rear Wheel Unit Sensor Fault Alert",210,"Chassis ECM (Immobiliser/TPMS)"],"L0005":["Front Wheel Unit Sensor Loss of Communication",210,"Chassis ECM (Immobiliser/TPMS)"],"L0006":["Rear Wheel Unit Sensor Loss of Communication",210,"Chassis ECM (Immobiliser/TPMS)"],"L0007":["Immobiliser/TPMS Control Module Fault",210,"Chassis ECM (Immobiliser/TPMS)"],"P0606":["Engine ECM internal error",197,"Engine ECM"],"P0642":["5V Sensor Circuit A - reference voltage low",197,"Engine ECM"],"P0643":["5V Sensor Circuit A - reference voltage high",197,"Engine ECM"],"P0652":["5V Sensor Circuit B - reference voltage low",198,"Engine ECM"],"P0653":["5V Sensor Circuit B - reference voltage high",198,"Engine ECM"],"P0698":["5V Sensor Circuit C - reference voltage low",199,"Engine ECM"],"P0699":["5V Sensor Circuit C - reference voltage high",199,"Engine ECM"],"P06A4":["5V Sensor Circuit D - reference voltage low",199,"Engine ECM"],"P06A5":["5V Sensor Circuit D - reference voltage high",199,"Engine ECM"],"P06A6":["5V Sensor Circuit A - reference voltage out of range",197,"Engine ECM"],"P06A7":["5V Sensor Circuit B - reference voltage out of range",198,"Engine ECM"],"P06A8":["5V Sensor Circuit C - reference voltage out of range",199,"Engine ECM"],"P06A9":["5V Sensor Circuit D - reference voltage out of range",199,"Engine ECM"],"P0704":["Clutch switch 1 input circuit malfunction",200,"Engine ECM"],"P0914":["Gear position sensor short circuit to ground or open circuit",201,"Engine ECM"],"P0915":["Gear position sensor signal error - correlation error with vehicle speed",201,"Engine ECM"],"P0917":["Gear position sensor short circuit to 5 Volt sensor supply",201,"Engine ECM"],"P1135":["Traction Control prevented due to ABS malfunction",202,"Engine ECM"],"P1136":["Cornering Traction Control disabled due to Inertial Measurement Unit (IMU) malfunction",202,"Engine ECM"],"P1508":["Unmatched Immobiliser/chassis ECM, causing the engine ECM to be disabled to prevent the motorcycle from being operated",203,"Engine ECM"],"P1520":["Unmatched ABS",203,"Engine ECM"],"P1521":["CAN fault - lost communication with ABS module or ABS system status error",203,"Engine ECM"],"P1574":["Cruise control prevented due to other malfunction",204,"Engine ECM"],"P1575":["Cruise control disabled until button press sequence completed After certain DTCs have been stored and subsequently repaired, the cruise control will be disabled until a test of the systems various switches has been performed",204,"Engine ECM"],"P1576":["Brake 1 switch correlation error with brake switch 2",204,"Engine ECM"],"P1577":["Brake 2 switch correlation error with brake switch 1",204,"Engine ECM"],"P1607":["Engine ECM ride by wire internal error",197,"Engine ECM"],"P1608":["Engine ECM ride by wire internal error",197,"Engine ECM"],"P1640":["Roll Over detection disabled due to Inertial Measurement Unit (IMU) malfunction",202,"Engine ECM"],"P16A0":["Unmatched IMU",203,"Engine ECM"],"P16A1":["",202,"Engine ECM"],"P16A2":["Engine ECM detects IMU present but with signal error",202,"Engine ECM"],"P1702":["",525,"Engine ECM"],"P1703":["",525,"Engine ECM"],"P2102":["Throttle actuator control internal motor relay does not operate",206,"Engine ECM"],"P2103":["Throttle actuator control internal motor relay operates continually",206,"Engine ECM"],"P2111":["Throttle valve drive error (stuck open)",206,"Engine ECM"],"P2119":["Throttle valve drive error",206,"Engine ECM"],"P2120":["Twist grip position sensor 1 short circuit to ground or open circuit",206,"Engine ECM"],"P2121":["Twist grip position sensor 1 signal out of range",206,"Engine ECM"],"P2123":["Twist grip position sensor 1 short circuit to battery positive",206,"Engine ECM"],"P2125":["Twist grip position sensor 2 short circuit to ground or open circuit",207,"Engine ECM"],"P2126":["Twist grip position sensor 2 signal out of range",207,"Engine ECM"],"P2128":["Twist grip position sensor 2 short circuit to battery positive",207,"Engine ECM"],"P2138":["Twist grip position sensor 1 correlation error with twist grip position sensor 2",208,"Engine ECM"],"P2226":["Ambient air pressure sensor circuit open circuit or short circuit to 5 Volt sensor supply",208,"Engine ECM"],"P2228":["Ambient air pressure sensor circuit short circuit to ground",208,"Engine ECM"],"C1176":["Preload adjustment system - user request input signal invalid (FTB -86 tambien al salir de modo Off-road)",0,"Suspension ECM (SCU, Tiger 900 GT Pro)"],"C1177":["Damping adjustment system - user request input signal invalid",0,"Suspension ECM (SCU, Tiger 900 GT Pro)"],"C1173":["Rebound stepper motor under-current",0,"Suspension ECM (SCU, Tiger 900 GT Pro)"]};
+const NAMES = {C4:"Chassis ECM (CCU)",C5:"Suspension ECM (SCU)",D6:"Engine ECM (OBD)",
+  D5:"Modulo D5 (SW TRUK0200) (?)",C2:"Modulo C2 sin VIN, posible accesorio/TPMS (?)"};
+const DEFAULT_PROFILE=[{addr:"C2",obd:false},{addr:"C4",obd:false},{addr:"C5",obd:false},{addr:"D5",obd:false},{addr:"D6",obd:true}];
+const MIN_VOLT = 12.0;
+
+/* ------------------------------------------------------------------ utilidades */
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const hex = b => Array.from(b, x => x.toString(16).padStart(2,"0")).join("");
+const fromHex = s => Uint8Array.from(s.match(/../g) || [], h => parseInt(h,16));
+const H = (n,w) => n.toString(16).toUpperCase().padStart(w,"0");
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const store = { get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},
+                set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}} };
+function log(s){ const el=$("log"); el.textContent += s + "\n"; if (el.textContent.length > 60000) el.textContent = el.textContent.slice(-40000); }
+function chip(id, text, cls){ const c=$(id); c.textContent=text; c.className="chip "+(cls||""); }
+
+/* ------------------------------------------------------------------ BLE */
+const SERVICES = ["0000fff0-0000-1000-8000-00805f9b34fb","0000ffe0-0000-1000-8000-00805f9b34fb",
+  "e7810a71-73ae-499d-8c15-faa9aef0c3f2","000018f0-0000-1000-8000-00805f9b34fb"];
+class Link {
+  constructor(){ this.dev=null; this.rx=null; this.tx=null; this.buf=""; this.lost=false; }
+  async open(){
+    this.dev = this.dev || await navigator.bluetooth.requestDevice({acceptAllDevices:true, optionalServices:SERVICES});
+    this.dev.addEventListener("gattserverdisconnected", () => { this.lost = true; chip("stLink","Desconectado","bad"); });
+    const gatt = await this.dev.gatt.connect();
+    let pick = null;
+    for (const s of await gatt.getPrimaryServices()) {
+      const chars = await s.getCharacteristics();
+      const n = chars.find(c => c.properties.notify || c.properties.indicate);
+      const w = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
+      if (n && w) { pick = [n, w, s.uuid]; break; }
+    }
+    if (!pick) throw new Error("El adaptador no expone un servicio serie BLE conocido.");
+    [this.rx, this.tx] = pick;
+    await this.rx.startNotifications();
+    this.rx.addEventListener("characteristicvaluechanged", e => { this.buf += new TextDecoder().decode(e.target.value); });
+    this.lost = false;
+    log(`BLE: ${this.dev.name || "?"} servicio ${pick[2]}`);
+    chip("stLink", this.dev.name || "Conectado", "on");
+  }
+  async write(s){
+    if (this.lost) throw new Error("LINK");
+    const b = new TextEncoder().encode(s);
+    for (let i = 0; i < b.length; i += 20) {
+      const part = b.slice(i, i + 20);
+      if (this.tx.properties.writeWithoutResponse && this.tx.writeValueWithoutResponse) await this.tx.writeValueWithoutResponse(part);
+      else await this.tx.writeValue(part);
+    }
+  }
+  async prompt(timeout){
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeout && !this.buf.includes(">")) { if (this.lost) throw new Error("LINK"); await sleep(10); }
+    const out = this.buf; this.buf = ""; return out;
+  }
+}
+
+/* ------------------------------------------------------------------ ELM327 */
+class Elm {
+  constructor(link){ this.l = link; this.mode = null; this.ext = false; this.proto11 = "6"; }
+  lines(raw, c=""){ return raw.replace(/>/g,"").split(/[\r\n]+/).map(s => s.trim()).filter(s => s && s !== c); }
+  async cmd(c, timeout=2000){ this.l.buf = ""; await this.l.write(c + "\r"); const raw = await this.l.prompt(timeout); log(">> " + c + "\n" + raw.trim()); return this.lines(raw, c); }
+  async sniff(ms=600){
+    await this.cmd("ATCAF0"); await this.cmd("ATCSM1");
+    this.l.buf = ""; await this.l.write("ATMA\r"); await sleep(ms); await this.l.write("\r");
+    const raw = await this.l.prompt(2000); log(">> ATMA\n" + raw.slice(0, 400));
+    return parseFrames(this.lines(raw, "ATMA"), false);
+  }
+  async voltage(){ for (const l of await this.cmd("ATRV")) { const m = l.match(/(\d+(?:\.\d+)?)\s*V/i); if (m) return parseFloat(m[1]); } return null; }
+  async init(){
+    await this.cmd("ATZ", 3000); this.mode = null; this.ext = false;
+    for (const c of ["ATE0","ATL0","ATS0","ATH1","ATAT1"]) await this.cmd(c);
+    let proto = null;
+    for (const p of ["6","8"]) { await this.cmd("ATSP"+p); await this.cmd("ATCRA"); if ((await this.sniff()).length) { proto = p; break; } }
+    if (!proto) throw new Error("No se ve trafico CAN. Revisa contacto ON y conector.");
+    this.proto11 = proto; await this.setExt(true);
+    chip("stBus", `CAN ${proto==="6"?"500":"250"} kbps · 29 bit`, "on");
+    return proto;
+  }
+  async setExt(ext){ if (this.ext === ext && this.mode !== null) return;
+    await this.cmd("ATSP" + (ext ? ({"6":"7","8":"9"})[this.proto11] : this.proto11)); this.ext = ext; this.mode = null; }
+  async header(id){ await this.cmd("ATCP" + H(id >>> 24, 2)); await this.cmd("ATSH" + H(id & 0xFFFFFF, 6)); }
+  async request(addr, payload, timeout=2000, retries=3){
+    const rq = reqId(addr), rs = respId(addr);
+    if (this.mode !== "iso"+addr) {
+      await this.cmd("ATCAF1"); await this.header(rq); await this.cmd("ATCRA"+H(rs,8));
+      await this.cmd("ATFCSH"+H(rq,8)); await this.cmd("ATFCSD300000"); await this.cmd("ATFCSM1");
+      this.mode = "iso"+addr;
+    }
+    try {
+      for (let i = 0; i < retries; i++) {
+        const lines = await this.cmd(hex(payload).toUpperCase(), timeout);
+        const [msgs, partial] = reassemble(parseFrames(lines, true).filter(f => f[0] === rs));
+        const out = msgs.get(rs) || [];
+        const pend = out.filter(m => m.length >= 3 && m[0] === 0x7F && m[2] === 0x78);
+        const fin = out.filter(m => !pend.includes(m));
+        if (fin.length || !pend.length) return [fin, partial.has(rs)];
+        await this.cmd("ATSTFF"); timeout = Math.max(timeout, 3000);
+      }
+      return [[], false];
+    } finally { await this.cmd("ATST32"); }
+  }
+}
+const reqId = a => (0x18DA00F1 | (a << 8)) >>> 0;
+const respId = a => (0x18DAF100 | a) >>> 0;
+
+function parseFrames(lines, ext){
+  const n = ext ? 8 : 3, out = [];
+  for (let l of lines) { l = l.replace(/ /g,"");
+    if (!/^[0-9A-Fa-f]+$/.test(l) || l.length < n+2 || l.length > n+16 || (l.length-n) % 2) continue;
+    out.push([parseInt(l.slice(0,n),16) >>> 0, fromHex(l.slice(n))]); }
+  return out;
+}
+function reassemble(frames){
+  const msgs = new Map(), part = new Map();
+  for (const [id, d] of frames) {
+    if (!d.length) continue; const t = d[0] >> 4;
+    if (t === 0) { (msgs.get(id) || msgs.set(id, []).get(id)).push(d.slice(1, 1 + (d[0] & 15))); }
+    else if (t === 1 && d.length >= 2) part.set(id, {n:((d[0]&15)<<8)|d[1], b:Array.from(d.slice(2)), sn:1});
+    else if (t === 2 && part.has(id)) { const p = part.get(id);
+      if ((d[0] & 15) !== (p.sn & 15)) { part.delete(id); continue; }
+      p.sn++; p.b.push(...d.slice(1));
+      if (p.b.length >= p.n) { (msgs.get(id) || msgs.set(id, []).get(id)).push(Uint8Array.from(p.b.slice(0, p.n))); part.delete(id); } }
+  }
+  return [msgs, part];
+}
+
+/* ------------------------------------------------------------------ decodificacion */
+const LET = "PCBU";
+const dtcStr = (b0,b1) => LET[b0>>6] + ((b0>>4)&3) + (b0&15).toString(16).toUpperCase() + H(b1,2);
+const BITS = ["testFailed","testFailedThisCycle","pending","confirmed","notCompletedSinceClear","failedSinceClear","notCompletedThisCycle","MIL"];
+const NRC = {0x11:"servicio no soportado",0x12:"subfuncion no soportada",0x13:"longitud incorrecta",0x22:"condiciones no correctas",0x31:"fuera de rango",0x33:"acceso denegado",0x7E:"subfuncion no soportada en esta sesion",0x7F:"servicio no soportado en esta sesion"};
+const nrc = m => `NRC 0x${H(m[2],2)} ${NRC[m[2]]||""}`.trim();
+function describe(code){ const e = DB[code.slice(0,5)]; if (!e) return "(sin descripcion en la base)";
+  return `${e[0]} (${e[1] ? "manual p. "+e[1] : "boletin tecnico Triumph"}; seccion: ${e[2]})`; }
+function decode1902(m){
+  if (m.length < 3 || m[0] !== 0x59 || m[1] !== 0x02) return null;
+  const r = [];
+  for (let i = 3; i + 3 < m.length; i += 4) { const [b0,b1,ftb,st] = m.slice(i, i+4);
+    if (!b0 && !b1 && !ftb) continue;
+    r.push({dtc:`${dtcStr(b0,b1)}-${H(ftb,2)}`, bytes:H(b0,2)+H(b1,2)+H(ftb,2), status:"0x"+H(st,2),
+      flags:BITS.filter((_,i)=>st>>i&1).join(","), falla:!!(st&0x2D), activa:!!(st&1)}); }
+  return r;
+}
+const OBD_MODES = {3:"confirmado",7:"pendiente",10:"permanente"};
+function decodeObd(m, mode){
+  if (m.length < 2 || m[0] !== mode + 0x40) return null;
+  const body = m.length % 2 === 0 ? m.slice(2) : m.slice(1), r = [];
+  for (let i = 0; i + 1 < body.length; i += 2) if (body[i] || body[i+1])
+    r.push({dtc:dtcStr(body[i],body[i+1]), status:OBD_MODES[mode], falla:true, activa:mode===3});
+  return r;
+}
+const PIDS = {0x0C:["RPM","rpm",(a,b)=>Math.round((a*256+b)/4)],0x0D:["Velocidad","km/h",a=>a],0x05:["Refrigerante","°C",a=>a-40],
+  0x0F:["Aire admision","°C",a=>a-40],0x11:["Acelerador","%",a=>+(a*100/255).toFixed(1)],0x04:["Carga","%",a=>+(a*100/255).toFixed(1)],
+  0x0B:["Presion colector","kPa",a=>a],0x0E:["Avance","°",a=>a/2-64],0x42:["Voltaje modulo","V",(a,b)=>+((a*256+b)/1000).toFixed(2)],
+  0x46:["Ambiente","°C",a=>a-40],0x5C:["Aceite","°C",a=>a-40],0x33:["Barometrica","kPa",a=>a]};
+const IDS = {0xF190:"VIN",0xF187:"num_parte",0xF18A:"proveedor",0xF18C:"num_serie",0xF191:"hw",0xF193:"version_hw",0xF195:"version_sw",0xF197:"nombre_sistema"};
+function text(b){ const t = new TextDecoder("ascii").decode(b).replace(/^[\x00\xff ]+|[\x00\xff ]+$/g,"");
+  return t && /^[\x20-\x7e]+$/.test(t) ? t : hex(b); }
+
+/* ------------------------------------------------------------------ lecturas */
+async function readModule(elm, mod){
+  const a = parseInt(mod.addr,16);
+  const r = {addr:mod.addr, nombre:NAMES[mod.addr]||("Modulo "+mod.addr), req:"0x"+H(reqId(a),8), resp:"0x"+H(respId(a),8), obd:!!mod.obd};
+  await elm.setExt(true);
+  if (mod.obd) {
+    let [ms] = await elm.request(a, [0x01,0x01], 2000, 1);
+    for (const m of ms) if (m[0]===0x41 && m[1]===0x01) { r.mil = !!(m[2]&0x80); r.dtc_reportados = m[2]&0x7F; }
+    const dtcs = []; let got = false;
+    for (const mode of [3,7,10]) { [ms] = await elm.request(a, [mode], 2000, 1);
+      for (const m of ms) { if (m[0]===0x7F) { (r.negativas ||= []).push(`OBD ${H(mode,2)}: ${nrc(m)}`); continue; }
+        const d = decodeObd(m, mode); if (d) { got = true; dtcs.push(...d); } } }
+    if (got) { r.servicio = "OBD 03/07/0A"; r.dtc = dtcs; }
+  } else {
+    for (const [did, key] of Object.entries(IDS)) { const [ms] = await elm.request(a, [0x22, did>>8, did&255], 1000, 1);
+      for (const m of ms) if (m.length > 3 && m[0]===0x62 && (m[1]<<8|m[2])==did) (r.ident ||= {})[key] = text(m.slice(3)); }
+    for (const mask of [0xFF,0x2D,0x0C,0x04,0x08]) { const [ms] = await elm.request(a, [0x19,0x02,mask]);
+      let done = false;
+      for (const m of ms) { if (m[0]===0x7F) { (r.negativas ||= []).push(`UDS 19 02 ${H(mask,2)}: ${nrc(m)}`); continue; }
+        const d = decode1902(m); if (d) { r.servicio = "UDS 19 02 "+H(mask,2); r.dtc = d; r.raw = hex(m); done = true; } }
+      if (done) break; }
+    for (const d of (r.dtc||[]).filter(x => x.falla)) {
+      const dtc3 = Array.from(fromHex(d.bytes));
+      for (const [key, sub] of [["snapshot",4],["datos_ext",6]]) { const [ms] = await elm.request(a, [0x19, sub, ...dtc3, 0xFF], 2000, 1);
+        for (const m of ms) if (m[0]===0x59 && m.length > 6) d[key] = hex(m.slice(6)); } }
+  }
+  for (const d of (r.dtc||[])) d.descripcion = describe(d.dtc);
+  return r;
+}
+async function supportedPids(elm, a){
+  const s = new Set();
+  for (let base = 0; base <= 0x40; base += 0x20) { const [ms] = await elm.request(a, [0x01, base], 2000, 1);
+    const m = ms.find(x => x.length >= 6 && x[0]===0x41 && x[1]===base); if (!m) break;
+    const v = ((m[2]<<24)|(m[3]<<16)|(m[4]<<8)|m[5]) >>> 0;
+    for (let i = 0; i < 32; i++) if ((v >>> (31-i)) & 1) s.add(base+i+1);
+    if (!(v & 1)) break; }
+  return s;
+}
+
+/* ------------------------------------------------------------------ comparacion */
+const faults = m => Object.fromEntries((m.dtc||[]).filter(d => d.falla).map(d => [d.dtc, d]));
+function compare(results, base){
+  const key = m => m.addr || H(parseInt(m.resp,16) & 255, 2);
+  const old = Object.fromEntries((base.modulos||[]).map(m => [key(m), faults(m.despues_de_borrar || m)]));
+  return results.map(m => { const n = faults(m), p = old[m.addr] || {};
+    return {nombre:m.nombre, nuevas:Object.keys(n).filter(k=>!(k in p)), resueltas:Object.keys(p).filter(k=>!(k in n)), persisten:Object.keys(n).filter(k=>k in p)}; });
+}
+
+/* ------------------------------------------------------------------ interfaz */
+let link = null, elm = null, last = null, busy = false, liveOn = false;
+function setBusy(b){ busy = b; for (const id of ["bRead","bLive","bExport","bTrip","bBus"]) $(id).disabled = b || !elm || (id==="bExport" && !last);
+  $("bConnect").disabled = b; updateClearBtn(); }
+
+function renderModule(r){
+  const f = (r.dtc||[]).filter(d => d.falla), o = (r.dtc||[]).filter(d => !d.falla);
+  let h = `<section class="panel mod"><h2>${esc(r.nombre)} <code>0x${esc(r.addr)}</code></h2>`;
+  if (r.ident) h += `<div class="ident">${Object.entries(r.ident).map(([k,v]) => `${esc(k)}: ${esc(v)}`).join(" · ")}</div>`;
+  if ("mil" in r) h += `<p>MIL <b>${r.mil ? "ENCENDIDA" : "apagada"}</b> · DTC reportados: ${r.dtc_reportados}</p>`;
+  if (r.dtc) {
+    if (!f.length) h += `<p class="ok">Sin fallas registradas</p>`;
+    for (const d of f) h += `<div class="dtc ${d.activa ? "act" : ""}"><b>${esc(d.dtc)}</b><span class="tag">${d.activa ? "Activa" : "Registrada"} · ${esc(d.status)}</span>
+      <div class="desc">${esc(d.descripcion)}</div>
+      ${d.snapshot ? `<div class="raw">snapshot: ${esc(d.snapshot)}</div>` : ""}${d.datos_ext ? `<div class="raw">datos ext: ${esc(d.datos_ext)}</div>` : ""}</div>`;
+    if (o.length) h += `<details><summary>${o.length} codigos listados sin falla (prueba no completada)</summary>${o.map(d => `<code>${esc(d.dtc)}</code>`).join("")}</details>`;
+  } else h += `<p class="note">No respondio a lectura de DTC ${esc((r.negativas||[]).join("; "))}</p>`;
+  if (r.borrado) h += `<p><b>Borrado:</b> ${esc(r.borrado)}</p>`;
+  return h + `</section>`;
+}
+function render(){
+  $("mods").innerHTML = last ? last.modulos.map(renderModule).join("") : "";
+  const cmp = last && last.comparacion;
+  $("cmp").innerHTML = cmp ? `<section class="panel"><h2 style="font:600 19px var(--display);margin:0">Contra la ultima lectura limpia</h2><ul class="cmp">${
+    cmp.map(c => `<li><b>${esc(c.nombre)}</b>: nuevas ${esc(c.nuevas.join(", ")||"-")} · resueltas ${esc(c.resueltas.join(", ")||"-")}</li>`).join("")}</ul></section>` : "";
+  const withF = last ? last.modulos.filter(m => !m.obd && m.dtc) : [];
+  $("clearPanel").hidden = !withF.length;
+  $("clearChecks").innerHTML = withF.map(m => `<label><input type="checkbox" id="clr_${m.addr}" ${(m.dtc||[]).some(d=>d.falla) ? "checked" : ""}> ${esc(m.nombre)}</label>`).join("");
+  updateClearBtn();
+}
+function updateClearBtn(){ $("bClear").disabled = busy || !elm || $("clearWord").value.trim() !== "BORRAR"; }
+$("clearWord").addEventListener("input", updateClearBtn);
+
+async function guarded(fn){
+  if (busy) return; setBusy(true);
+  try { await fn(); }
+  catch (e) {
+    if (String(e.message) === "LINK") { log("Enlace perdido; reconectando..."); chip("stLink","Reconectando","warn");
+      try { await link.open(); elm = new Elm(link); await elm.init(); log("Reconectado. Repite la accion."); } catch (e2) { log("No se pudo reconectar: " + e2.message); } }
+    else { log("Error: " + e.message); alertNote(e.message); }
+  } finally { setBusy(false); }
+}
+function alertNote(t){ $("support").textContent = t; }
+
+$("bConnect").onclick = () => guarded(async () => {
+  link = link || new Link(); await link.open(); elm = new Elm(link); await elm.init();
+  const v = await elm.voltage(); chip("stVolt", v != null ? `${v.toFixed(1)} V` : "Voltaje: ?", v != null && v < MIN_VOLT ? "bad" : "on");
+  alertNote(v != null && v < MIN_VOLT ? "Voltaje bajo: la lectura puede mostrar codigos falsos y el borrado esta bloqueado." : "Conectado. No se transmite nada en 11 bit.");
+});
+$("bRead").onclick = () => guarded(async () => {
+  const prof = store.get("tiger_profile") || DEFAULT_PROFILE;
+  last = {version:"3.1", fecha:new Date().toISOString(), voltaje:await elm.voltage(), modulos:[]};
+  for (const m of prof) { alertNote(`Leyendo ${NAMES[m.addr]||m.addr}...`); last.modulos.push(await readModule(elm, m)); render(); }
+  const base = store.get("tiger_baseline"); if (base) last.comparacion = compare(last.modulos, base);
+  const clean = last.modulos.every(m => !(m.dtc||[]).some(d => d.falla));
+  if (clean) store.set("tiger_baseline", last);
+  alertNote(clean ? "Lectura limpia: guardada como linea base para comparar la proxima vez." : "Lectura terminada.");
+  render();
+});
+$("bLive").onclick = async () => {
+  if (liveOn) { liveOn = false; $("bLive").textContent = "Datos en vivo"; return; }
+  if (busy) return; setBusy(true); liveOn = true; $("bLive").disabled = false; $("bLive").textContent = "Detener datos en vivo";
+  try {
+    await elm.setExt(true); const a = 0xD6; const sup = await supportedPids(elm, a);
+    const pids = [0x0C,0x0D,0x05,0x0F,0x11,0x04,0x0B,0x0E,0x42,0x46,0x5C,0x33].filter(p => sup.has(p));
+    $("livePanel").hidden = false;
+    $("gauges").innerHTML = pids.map(p => `<div class="g"><div class="v" id="pv${p}">-</div><div class="l">${PIDS[p][0]} (${PIDS[p][1]})</div></div>`).join("");
+    while (liveOn) { for (const p of pids) { if (!liveOn) break; const [ms] = await elm.request(a, [0x01, p], 1000, 1);
+        const m = ms.find(x => x.length >= 3 && x[0]===0x41 && x[1]===p); if (m) $("pv"+p).textContent = PIDS[p][2](m[2], m[3]||0); } }
+  } catch (e) { log("Datos en vivo: " + e.message); }
+  finally { liveOn = false; $("bLive").textContent = "Datos en vivo"; setBusy(false); }
+};
+$("bExport").onclick = () => { if (!last) return;
+  const blob = new Blob([JSON.stringify(last, null, 2)], {type:"application/json"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = `dtc_${last.fecha.replace(/[-:T]/g,"").slice(0,14)}.json`; a.click(); };
+$("bClear").onclick = () => guarded(async () => {
+  const v = await elm.voltage(); chip("stVolt", v != null ? `${v.toFixed(1)} V` : "?", v != null && v >= MIN_VOLT ? "on" : "bad");
+  if (v == null || v < MIN_VOLT) { alertNote(`Borrado cancelado: voltaje ${v ?? "?"} V (minimo ${MIN_VOLT} V).`); return; }
+  store.set("tiger_respaldo_" + Date.now(), last);
+  for (const m of last.modulos) { const cb = $("clr_"+m.addr); if (!cb || !cb.checked) continue;
+    await elm.setExt(true); const a = parseInt(m.addr,16); const [ms] = await elm.request(a, [0x14,0xFF,0xFF,0xFF], 3000);
+    let out = "sin respuesta"; for (const x of ms) { if (x[0]===0x54) out = "BORRADO OK"; else if (x[0]===0x7F) out = "rechazado " + nrc(x); }
+    m.borrado = out;
+    if (out === "BORRADO OK") { await sleep(1000); const n = await readModule(elm, m); m.despues_de_borrar = n; m.dtc = n.dtc; }
+    render(); }
+  $("clearWord").value = ""; alertNote("Borrado terminado. Rueda la moto y vuelve a leer para ver si algo reaparece.");
+});
+
+/* ------------------------------------------------------------------ modo viaje */
+const TRIP_DTC_EVERY = 20000, LOW_V_RUN = 12.0, LOW_V_ANY = 10.5, MAX_SAMPLES = 15000;
+let trip = null, wakeLock = null;
+const fmtT = d => d.toTimeString().slice(0,8);
+function tripEvent(txt, bad=false){
+  const e = {t:new Date().toISOString(), txt, bad}; trip.eventos.push(e);
+  const li = document.createElement("li"); li.innerHTML = `<time>${fmtT(new Date(e.t))}</time><span class="${bad?"bad":""}">${esc(txt)}</span>`;
+  $("tEvents").prepend(li); log("VIAJE: " + txt);
+  if (bad) { try { navigator.vibrate && navigator.vibrate([300,150,300]); } catch(e){} }
+}
+async function faultSet(a){
+  for (const mask of [0xFF,0x0C,0x08]) { const [ms] = await elm.request(a, [0x19,0x02,mask], 2000, 1);
+    for (const m of ms) { const d = decode1902(m); if (d) return new Set(d.filter(x => x.falla).map(x => x.dtc)); } }
+  return null;
+}
+async function obdCount(a){ const [ms] = await elm.request(a, [0x01,0x01], 1500, 1);
+  const m = ms.find(x => x[0]===0x41 && x[1]===0x01); return m ? {n:m[2]&0x7F, mil:!!(m[2]&0x80)} : null; }
+async function pid(a, p){ const [ms] = await elm.request(a, [0x01,p], 1000, 1);
+  const m = ms.find(x => x.length >= 3 && x[0]===0x41 && x[1]===p); return m ? PIDS[p][2](m[2], m[3]||0) : null; }
+async function tripCheckDtc(prof){
+  for (const mod of prof) { const a = parseInt(mod.addr,16), name = NAMES[mod.addr] || mod.addr;
+    if (mod.obd) { const c = await obdCount(a); if (!c) continue;
+      if (trip.base[mod.addr] == null) trip.base[mod.addr] = c.n;
+      else if (c.n > trip.base[mod.addr] || c.mil) { tripEvent(`${name}: ${c.n} codigo(s)${c.mil?" y MIL encendida":""}`, true); trip.base[mod.addr] = c.n; flagDtc(name); }
+      continue; }
+    const s = await faultSet(a); if (!s) continue;
+    if (!trip.base[mod.addr]) { trip.base[mod.addr] = s; continue; }
+    for (const code of s) if (!trip.base[mod.addr].has(code)) { tripEvent(`NUEVO ${code} en ${name}: ${describe(code)}`, true); flagDtc(code); }
+    trip.base[mod.addr] = s; }
+}
+function flagDtc(txt){ trip.nuevos++; $("tDtc").textContent = trip.nuevos; $("tDtcL").textContent = "Codigos nuevos: " + txt;
+  $("tDtc").parentElement.className = "tile big alert"; }
+function setTile(id, v, cls){ $(id).textContent = v ?? "-"; if (cls !== undefined) $(id).parentElement.className = "tile " + (id==="tVolt"?"big ":"") + cls; }
+async function tripLoop(prof){
+  const D6 = parseInt((prof.find(m => m.obd) || {addr:"D6"}).addr, 16);
+  let lastDtc = 0, lastLowEv = 0, prevRpm = 0, recent = [], fails = 0;
+  while (trip.on) {
+    try {
+      const v = await elm.voltage(); const now = Date.now();
+      const rpm = await pid(D6, 0x0C); const spd = await pid(D6, 0x0D);
+      const thr = await pid(D6, 0x11); const load = await pid(D6, 0x04);
+      const clt = (trip.muestras.length % 10 === 0) ? await pid(D6, 0x05) : trip.ultimoClt;
+      if (clt != null) trip.ultimoClt = clt;
+      const s = {t:new Date(now).toISOString(), v, rpm, spd, thr, load, clt}; trip.muestras.push(s);
+      if (trip.muestras.length > MAX_SAMPLES) trip.muestras = trip.muestras.filter((_, i) => i % 2 === 0);
+      recent.push(s); recent = recent.filter(x => now - Date.parse(x.t) < 8000);
+      if (v != null) { trip.vmin = Math.min(trip.vmin, v); $("tVmin").textContent = trip.vmin.toFixed(1); }
+      const running = rpm != null && rpm >= 400;
+      setTile("tVolt", v != null ? v.toFixed(1) : "-", v == null ? "" : (v < LOW_V_ANY || (running && v < LOW_V_RUN)) ? "alert" : "");
+      setTile("tRpm", rpm); setTile("tSpd", spd); setTile("tThr", thr); setTile("tLoad", load); setTile("tClt", trip.ultimoClt);
+      if (running && prevRpm < 400) {               // acaba de arrancar: minimo de voltaje en los ultimos 8 s
+        const vs = recent.map(x => x.v).filter(x => x != null); const mn = vs.length ? Math.min(...vs) : null;
+        trip.arranques.push({t:s.t, vmin:mn}); setTile("tCrank", mn != null ? mn.toFixed(1) : "?", mn != null && mn < 9.5 ? "alert" : mn != null && mn < 10.5 ? "warn" : "");
+        tripEvent(`Arranque del motor: voltaje minimo ${mn != null ? mn.toFixed(2)+" V" : "no medido"}`, mn != null && mn < 9.5);
+      }
+      if (!running && prevRpm >= 400) tripEvent("Motor apagado");
+      prevRpm = rpm ?? 0;
+      if (v != null && (v < LOW_V_ANY || (running && v < LOW_V_RUN)) && now - lastLowEv > 15000) {
+        tripEvent(`Voltaje bajo: ${v.toFixed(2)} V ${running ? "con motor encendido (carga insuficiente)" : ""}`, true); lastLowEv = now; }
+      if (now - lastDtc > TRIP_DTC_EVERY) { lastDtc = now; await tripCheckDtc(prof); }
+      fails = 0;
+    } catch (e) {
+      if (!trip.on) break;
+      fails++; tripEvent(`Enlace con el vLinker perdido (${e.message}); reconectando...`, false);
+      try { await link.open(); elm = new Elm(link); await elm.init(); tripEvent("Reconectado"); }
+      catch (e2) { await sleep(2000 * Math.min(fails, 5)); }
+    }
+  }
+}
+function tripTimer(){ if (!trip || !trip.on) return; const s = Math.floor((Date.now() - Date.parse(trip.inicio))/1000);
+  $("tripRec").textContent = `● REC ${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`; setTimeout(tripTimer, 1000); }
+async function lockScreen(){ try { if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); } catch(e) { log("Wake lock no disponible: " + e.message); } }
+document.addEventListener("visibilitychange", () => { if (trip && trip.on && document.visibilityState === "visible") lockScreen(); });
+
+$("bTrip").onclick = async () => {
+  if (busy || !elm) return; setBusy(true);
+  const prof = store.get("tiger_profile") || DEFAULT_PROFILE;
+  trip = {inicio:new Date().toISOString(), on:true, muestras:[], eventos:[], arranques:[], vmin:99, base:{}, nuevos:0, ultimoClt:null};
+  $("tEvents").innerHTML = ""; $("tripPanel").hidden = false; $("tDtc").textContent = "OK"; $("tDtcL").textContent = "Codigos nuevos";
+  $("tDtc").parentElement.className = "tile big"; $("tCrank").textContent = "-";
+  $("tripPanel").scrollIntoView({behavior:"smooth"});
+  await lockScreen(); tripTimer();
+  tripEvent("Inicio del registro. Leyendo codigos actuales como referencia...");
+  try { await elm.setExt(true); await tripCheckDtc(prof);
+    const prev = Object.entries(trip.base).filter(([k,v]) => v instanceof Set && v.size).map(([k,v]) => `${k}: ${[...v].join(", ")}`);
+    tripEvent(prev.length ? "Ya estaban registrados (no cuentan como nuevos): " + prev.join(" · ") : "Sin codigos previos. Cualquier codigo que aparezca se marcara como NUEVO.");
+    tripEvent("Listo. Puedes arrancar el motor: se medira el voltaje minimo del arranque.");
+  } catch (e) { tripEvent("Error al leer referencia: " + e.message); }
+  trip.loop = tripLoop(prof);
+};
+$("bTripStop").onclick = async () => {
+  if (!trip || !trip.on) return; trip.on = false; await trip.loop;
+  trip.fin = new Date().toISOString(); delete trip.on; delete trip.loop;
+  for (const k in trip.base) if (trip.base[k] instanceof Set) trip.base[k] = [...trip.base[k]];
+  try { if (wakeLock) await wakeLock.release(); } catch(e){}
+  const trips = store.get("tiger_trips") || [];
+  const save = {...trip, muestras: trip.muestras.length > 4000 ? trip.muestras.filter((_, i) => i % Math.ceil(trip.muestras.length/4000) === 0) : trip.muestras};
+  trips.unshift(save); while (trips.length > 10) trips.pop(); store.set("tiger_trips", trips);
+  tripEvent(`Registro guardado: ${trip.muestras.length} muestras, ${trip.eventos.filter(e=>e.bad).length} alertas.`);
+  $("tripRec").textContent = "■ detenido"; setBusy(false); renderTrips();
+};
+function download(name, text, type){ const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; a.click(); }
+function tripCsv(t){ return "hora,voltaje_V,rpm,velocidad_kmh,acelerador_pct,carga_pct,refrigerante_C\n" + t.muestras.map(s => [s.t, s.v ?? "", s.rpm ?? "", s.spd ?? "", s.thr ?? "", s.load ?? "", s.clt ?? ""].join(",")).join("\n") +
+  "\n\n#eventos\nhora,evento\n" + t.eventos.map(e => `${e.t},"${e.txt.replace(/"/g,"'")}"`).join("\n"); }
+function renderTrips(){
+  const trips = store.get("tiger_trips") || []; $("tripsPanel").hidden = !trips.length;
+  $("tripList").innerHTML = trips.map((t, i) => { const d = new Date(t.inicio), dur = Math.round((Date.parse(t.fin||t.inicio) - d)/60000);
+    const al = t.eventos.filter(e => e.bad).length, ar = (t.arranques||[]).map(a => a.vmin != null ? a.vmin.toFixed(1) : "?").join(", ");
+    return `<div class="tripRow"><span><b>${d.toLocaleDateString()} ${fmtT(d)}</b> · ${dur} min · min ${t.vmin < 99 ? t.vmin.toFixed(1) : "-"} V${ar ? " · arranques " + esc(ar) + " V" : ""} · <span class="${al?"bad":""}" style="${al?"color:var(--red);font-weight:600":""}">${al} alertas</span></span>
+      <span><button data-csv="${i}">CSV</button> <button data-json="${i}">JSON</button></span></div>`; }).join("");
+}
+$("tripList").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; const trips = store.get("tiger_trips") || [];
+  const t = trips[+(b.dataset.csv ?? b.dataset.json)]; if (!t) return; const n = "viaje_" + t.inicio.replace(/[-:T]/g,"").slice(0,12);
+  if (b.dataset.csv != null) download(n + ".csv", tripCsv(t), "text/csv"); else download(n + ".json", JSON.stringify(t, null, 2), "application/json"); });
+renderTrips();
+
+/* ------------------------------------------------------------------ explorador del bus (pasivo) */
+const BUS_LABELS = ["Nada","Freno delantero","Freno trasero","Ambos frenos","Acelerador","Clutch","Direccional izq.","Direccional der."];
+let bus = null;
+$("busMarks").innerHTML = BUS_LABELS.map(l => `<button data-mark="${esc(l)}">${esc(l)}</button>`).join("");
+$("busMarks").addEventListener("click", e => { const b = e.target.closest("button"); if (!b || !bus || !bus.on) return;
+  bus.marcas.push({t:Date.now() - bus.t0, etiqueta:b.dataset.mark}); bus.actual = b.dataset.mark;
+  for (const x of $("busMarks").children) x.classList.toggle("on", x === b); });
+async function busLoop(){
+  const L = link;
+  const startMa = async () => { L.buf = ""; await L.write("ATMA\r"); };
+  await startMa(); let pend = "", lastRestart = Date.now();
+  while (bus.on) {
+    await sleep(40);
+    if (L.lost) throw new Error("LINK");
+    const chunk = L.buf; L.buf = ""; pend += chunk;
+    const parts = pend.split(/\r|\n/); pend = parts.pop();
+    let restart = false;
+    for (let line of parts) { line = line.trim(); if (!line) continue;
+      if (/BUFFER FULL|STOPPED|>/.test(line)) { restart = true; continue; }
+      const f = parseFrames([line], false)[0];
+      if (f) { bus.tramas.push([Date.now() - bus.t0, f[0], hex(f[1])]); bus.n++; }
+      else if (/CAN ERROR|BUS/.test(line)) bus.errores++; }
+    if (pend.includes(">")) { pend = ""; restart = true; }
+    if (restart && bus.on) { bus.reinicios++; await sleep(20); await startMa(); lastRestart = Date.now(); }
+    else if (Date.now() - lastRestart > 4000 && !chunk) { L.buf = ""; await L.write("\r"); await sleep(100); await startMa(); lastRestart = Date.now(); }
+    if (bus.tramas.length > 120000) bus.tramas = bus.tramas.filter((_, i) => i % 2 === 0);
+    const s = Math.floor((Date.now() - bus.t0)/1000);
+    $("busRec").textContent = `● ${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+    $("busStat").textContent = `${bus.n} tramas · ${new Set(bus.tramas.slice(-3000).map(x => x[1])).size} IDs recientes · accion actual: ${bus.actual}`;
+  }
+  L.buf = ""; await L.write("\r"); await L.prompt(1500);
+}
+function busAnalyze(cap){
+  // Etiqueta cada trama con la accion activa; compara cada byte contra los periodos "Nada".
+  const marks = [...cap.marcas].sort((a,b) => a.t - b.t);
+  const labelAt = t => { let l = "Nada"; for (const m of marks) { if (m.t <= t) l = m.etiqueta; else break; } return l; };
+  const stats = new Map();                                   // key id:byte -> {label -> [sum, sum2, n, min, max]}
+  for (const [t, id, dh] of cap.tramas) { const lab = labelAt(t); const d = fromHex(dh);
+    for (let i = 0; i < d.length; i++) { const k = id + ":" + i; let o = stats.get(k); if (!o) stats.set(k, o = {});
+      const a = o[lab] ||= [0,0,0,255,0]; const v = d[i]; a[0] += v; a[1] += v*v; a[2]++; a[3] = Math.min(a[3], v); a[4] = Math.max(a[4], v); } }
+  const out = [];
+  for (const [k, o] of stats) { const base = o["Nada"]; if (!base || base[2] < 5) continue;
+    const bm = base[0]/base[2], bsd = Math.sqrt(Math.max(0, base[1]/base[2] - bm*bm));
+    for (const [lab, a] of Object.entries(o)) { if (lab === "Nada" || a[2] < 5) continue;
+      const m = a[0]/a[2]; const score = Math.abs(m - bm) / (bsd + 1);
+      if (score >= 3) { const [id, byte] = k.split(":"); out.push({accion:lab, id:"0x"+H(+id,3), byte:+byte, nada:bm.toFixed(1), accionVal:m.toFixed(1), rango:`${a[3]}-${a[4]}`, score:+score.toFixed(1)}); } } }
+  out.sort((a,b) => a.accion.localeCompare(b.accion) || b.score - a.score);
+  const by = {}; for (const c of out) (by[c.accion] ||= []).length < 8 && by[c.accion].push(c);
+  return by;
+}
+function renderBusResult(cap){
+  const by = busAnalyze(cap); cap.candidatos = by;
+  const ids = new Set(cap.tramas.map(x => x[1]));
+  let h = `<p class="note">${cap.tramas.length} tramas de ${ids.size} IDs en ${Math.round(cap.duracion/1000)} s · ${cap.reinicios} reinicios de captura.</p>`;
+  if (!Object.keys(by).length) h += `<p class="note">Sin diferencias claras. Repite cada accion mas tiempo (10 s) y alterna con "Nada".</p>`;
+  for (const [lab, list] of Object.entries(by)) h += `<h3 style="font:600 16px var(--display);margin:10px 0 4px">${esc(lab)}</h3><div class="scroll"><table class="cand">
+    <tr><th>ID</th><th>Byte</th><th>Nada</th><th>Con accion</th><th>Rango</th><th>Senal</th></tr>${list.map(c =>
+    `<tr><td><code>${c.id}</code></td><td>${c.byte}</td><td>${c.nada}</td><td>${c.accionVal}</td><td>${c.rango}</td><td>${c.score}</td></tr>`).join("")}</table></div>`;
+  h += `<div class="actions"><button id="bBusExport">Exportar captura (JSON)</button></div>`;
+  $("busResult").innerHTML = h;
+  $("bBusExport").onclick = () => download(`bus_${new Date(cap.inicio).toISOString().replace(/[-:T]/g,"").slice(0,12)}.json`,
+    JSON.stringify({...cap, tramas: cap.tramas.map(([t,id,d]) => [t, "0x"+H(id,3), d])}), "application/json");
+}
+$("bBus").onclick = async () => {
+  if (busy || !elm) return; setBusy(true);
+  bus = {inicio:new Date().toISOString(), t0:Date.now(), on:true, marcas:[{t:0, etiqueta:"Nada"}], actual:"Nada", tramas:[], n:0, reinicios:0, errores:0};
+  $("busPanel").hidden = false; $("busResult").innerHTML = ""; $("busPanel").scrollIntoView({behavior:"smooth"});
+  for (const x of $("busMarks").children) x.classList.toggle("on", x.dataset.mark === "Nada");
+  await lockScreen();
+  try {
+    await elm.cmd("ATSP" + elm.proto11); elm.ext = false; elm.mode = null;          // 11 bit, solo escucha
+    await elm.cmd("ATCAF0"); await elm.cmd("ATCSM1"); await elm.cmd("ATCRA"); await elm.cmd("ATH1"); await elm.cmd("ATS0");
+    bus.loop = busLoop(); await bus.loop;
+  } catch (e) { log("Explorador: " + e.message); $("busStat").textContent = "Captura interrumpida: " + e.message; }
+  finally {
+    bus.on = false; bus.duracion = Date.now() - bus.t0;
+    try { await elm.setExt(true); } catch(e){}
+    $("busRec").textContent = "■"; for (const x of $("busMarks").children) x.classList.remove("on");
+    renderBusResult(bus); setBusy(false);
+  }
+};
+$("bBusStop").onclick = () => { if (bus) bus.on = false; };
+
+if (!("bluetooth" in navigator)) alertNote("Este navegador no tiene Web Bluetooth. Usa Chrome en Android y abre la pagina desde una direccion https.");
+else if (!window.isSecureContext) alertNote("Web Bluetooth requiere abrir esta pagina desde https.");
+else alertNote("Moto detenida, contacto ON, motor apagado. Pulsa Conectar y elige el vLinker de la lista.");
+</script>
+</body>
+</html>
